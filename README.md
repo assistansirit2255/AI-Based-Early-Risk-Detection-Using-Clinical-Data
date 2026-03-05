@@ -90,7 +90,7 @@ python final_clinical_dashboard.py
 
 Example:
 
-![Dashboard Screenshot](ip.jpeg)
+![Dashboard Screenshot](dashboard1.png)
 
 ---
 
