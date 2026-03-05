@@ -86,10 +86,8 @@ python final_clinical_dashboard.py
 
 ## 📊 Dashboard Preview
 
-(Add your dashboard screenshot here)
-
-Example:
-
+![Dashboard Screenshot](dashboard2.png)
+![Dashboard Screenshot](dashboard3.png)
 ![Dashboard Screenshot](dashboard1.png)
 
 ---
