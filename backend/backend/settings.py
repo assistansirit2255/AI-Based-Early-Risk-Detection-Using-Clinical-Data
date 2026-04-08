@@ -6,12 +6,16 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-change-me-in-production-use-env-var",
-)
+_DEFAULT_SECRET = "django-insecure-change-me-in-production-use-env-var"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", _DEFAULT_SECRET)
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
+
+# Fail fast in production if the default insecure key is still in use
+if not DEBUG and SECRET_KEY == _DEFAULT_SECRET:
+    raise RuntimeError(
+        "DJANGO_SECRET_KEY environment variable must be set to a secure value in production."
+    )
 
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost 127.0.0.1").split()
 
@@ -47,13 +51,9 @@ REST_FRAMEWORK = {
     ],
 }
 
-# Allow React dev server during local development
-CORS_ALLOWED_ORIGINS = os.environ.get(
-    "CORS_ALLOWED_ORIGINS",
-    "http://localhost:5173 http://127.0.0.1:5173",
-).split()
-
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+# CORS: always use an explicit allowlist; never blanket-allow all origins
+_default_cors = "http://localhost:5173 http://127.0.0.1:5173"
+CORS_ALLOWED_ORIGINS = os.environ.get("CORS_ALLOWED_ORIGINS", _default_cors).split()
 
 # ML model paths (relative to repository root, one level up from this file)
 REPO_ROOT = BASE_DIR.parent

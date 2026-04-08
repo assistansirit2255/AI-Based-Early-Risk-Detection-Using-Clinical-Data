@@ -68,9 +68,15 @@ def predict_view(request, patient_id):
 
     try:
         result = predict_from_records(records)
-    except FileNotFoundError as exc:
-        return Response({"error": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-    except Exception as exc:
-        return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except FileNotFoundError:
+        return Response(
+            {"error": "ML model is not available. Please contact the administrator."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    except Exception:
+        return Response(
+            {"error": "An error occurred during prediction. Please try again later."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     return Response(result)

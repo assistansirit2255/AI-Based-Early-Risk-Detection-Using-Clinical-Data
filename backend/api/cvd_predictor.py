@@ -89,11 +89,14 @@ def _clamp_level(v: float) -> float:
     return float(round(v))
 
 
+SECONDS_PER_DAY = 86400.0
+
+
 def _linear_trend(pairs: List[Tuple[datetime, float]]) -> float:
     if len(pairs) < 2:
         return 0.0
     t0 = pairs[0][0]
-    t = np.array([(dt - t0).total_seconds() / 86400.0 for dt, _ in pairs], dtype=float)
+    t = np.array([(dt - t0).total_seconds() / SECONDS_PER_DAY for dt, _ in pairs], dtype=float)
     y = np.array([v for _, v in pairs], dtype=float)
     denom = np.var(t)
     if denom == 0:
