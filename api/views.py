@@ -93,11 +93,14 @@ class CVDPredictView(APIView):
             result = predict_from_records(enriched)
         except FileNotFoundError as exc:
             logger.error('Model artifact missing: %s', exc)
-            return Response({'error': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        except Exception as exc:
+            return Response(
+                {'error': 'CVD model artifacts are not available on this server.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception:
             logger.exception('Prediction error for patient %s', pk)
             return Response(
-                {'error': f'Prediction failed: {exc}'},
+                {'error': 'An internal error occurred while running the prediction. Please try again later.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
