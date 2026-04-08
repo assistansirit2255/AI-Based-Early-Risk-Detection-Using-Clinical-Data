@@ -1,4 +1,26 @@
-*.pkl 
-*.joblib 
-__pycache__/ 
-.ipynb_checkpoints/ 
+*.pkl
+*.joblib
+__pycache__/
+.ipynb_checkpoints/
+
+# Django
+backend/db.sqlite3
+backend/*.log
+backend/.env
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
