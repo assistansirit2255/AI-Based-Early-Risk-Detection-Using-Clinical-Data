@@ -18,4 +18,12 @@ urlpatterns = [
     # Predictions
     path("patients/<int:pk>/predict/", views.predict, name="predict"),
     path("patients/<int:pk>/predictions/", views.prediction_list, name="prediction-list"),
+
+    # Diabetes Records
+    path("patients/<int:pk>/diabetes-records/", views.diabetes_record_list, name="diabetes-record-list"),
+    path("patients/<int:pk>/diabetes-records/<int:rid>/", views.diabetes_record_detail, name="diabetes-record-detail"),
+
+    # Diabetes Predictions
+    path("patients/<int:pk>/diabetes/predict/", views.diabetes_predict, name="diabetes-predict"),
+    path("patients/<int:pk>/diabetes-predictions/", views.diabetes_prediction_list, name="diabetes-prediction-list"),
 ]

@@ -10,7 +10,9 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
-from api.models import Patient, HealthRecord, Prediction
+from api.models import Patient, HealthRecord, Prediction, DiabetesRecord, DiabetesPrediction
+from ml_api.cvd_predictor import ModelNotAvailableError
+from ml_api.diabetes_predictor import ModelNotAvailableError as DiabetesModelNotAvailableError
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -42,6 +44,24 @@ def make_record(patient, **kwargs):
     )
     defaults.update(kwargs)
     return HealthRecord.objects.create(**defaults)
+
+
+def make_diabetes_record(patient, **kwargs):
+    from datetime import date
+    defaults = dict(
+        patient=patient,
+        date=kwargs.pop("date", date.today()),
+        pregnancies=1,
+        glucose=120.0,
+        blood_pressure=80.0,
+        skin_thickness=20.0,
+        insulin=100.0,
+        bmi=28.0,
+        diabetes_pedigree_function=0.5,
+        age=30,
+    )
+    defaults.update(kwargs)
+    return DiabetesRecord.objects.create(**defaults)
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────
@@ -202,13 +222,14 @@ class PredictionTest(TestCase):
         self.assertEqual(data["data_type_used"], "real")
 
     @patch("api.views.predict_from_records")
-    def test_predict_model_not_available(self, mock_predict):
-        from ml_api.cvd_predictor import ModelNotAvailableError
-        mock_predict.side_effect = ModelNotAvailableError("Model file missing")
+    def test_predict_model_unavailable_returns_503(self, mock_predict):
+        mock_predict.side_effect = ModelNotAvailableError("missing model")
         from datetime import date
-        make_record(self.patient)
+        make_record(self.patient, date=date(2024, 1, 1))
+
         response = self.client.post(f"/api/patients/{self.patient.pk}/predict/")
         self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["status"], "error")
 
     def test_list_predictions_empty(self):
         response = self.client.get(f"/api/patients/{self.patient.pk}/predictions/")
@@ -258,6 +279,64 @@ class RecordNormalizerTest(TestCase):
         from ml_api.record_normalizer import normalize_records
         with self.assertRaises(ValueError):
             normalize_records([], min_records=5)
+
+
+# ── Diabetes ──────────────────────────────────────────────────────────────────
+
+class DiabetesPredictionTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.patient = make_patient()
+
+    def test_diabetes_predict_no_records_returns_422(self):
+        response = self.client.post(f"/api/patients/{self.patient.pk}/diabetes/predict/")
+        self.assertEqual(response.status_code, 422)
+
+    def test_diabetes_records_create_and_list(self):
+        payload = {
+            "date": "2024-01-15",
+            "pregnancies": 2,
+            "glucose": 140,
+            "blood_pressure": 85,
+            "skin_thickness": 25,
+            "insulin": 110,
+            "bmi": 30.5,
+            "diabetes_pedigree_function": 0.8,
+            "age": 35,
+        }
+        response = self.client.post(
+            f"/api/patients/{self.patient.pk}/diabetes-records/", payload, format="json"
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.get(f"/api/patients/{self.patient.pk}/diabetes-records/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["data"]), 1)
+
+    @patch("api.views.predict_diabetes_record")
+    def test_diabetes_predict_success(self, mock_predict):
+        mock_predict.return_value = {
+            "prediction": 1,
+            "probability": 0.72,
+            "shap_values": {"Glucose": 0.2},
+            "shap_warning": "",
+        }
+        make_diabetes_record(self.patient)
+
+        response = self.client.post(f"/api/patients/{self.patient.pk}/diabetes/predict/")
+        self.assertEqual(response.status_code, 201)
+        data = response.data["data"]
+        self.assertEqual(data["prediction"], 1)
+        self.assertAlmostEqual(data["probability"], 0.72)
+
+    @patch("api.views.predict_diabetes_record")
+    def test_diabetes_predict_model_unavailable_returns_503(self, mock_predict):
+        mock_predict.side_effect = DiabetesModelNotAvailableError("missing model")
+        make_diabetes_record(self.patient)
+
+        response = self.client.post(f"/api/patients/{self.patient.pk}/diabetes/predict/")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["status"], "error")
 
 
 # ── ML: history_collapse ──────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
@@ -50,6 +51,20 @@ class ModelNotAvailableError(RuntimeError):
 
 # ── Model / feature-columns loading (cached) ──────────────────────────────────
 
+def _resolve_path(path_value: str) -> str:
+    if not path_value:
+        return ""
+    expanded = os.path.expanduser(path_value)
+    if os.path.isabs(expanded):
+        return expanded
+    try:
+        from django.conf import settings
+        base = Path(getattr(settings, "BASE_DIR", Path.cwd())).parent
+    except Exception:
+        base = Path.cwd()
+    return str((base / expanded).resolve())
+
+
 def _get_model_paths() -> tuple[str, str]:
     """Resolve model paths from Django settings or environment variables."""
     try:
@@ -65,7 +80,24 @@ def _get_model_paths() -> tuple[str, str]:
     if not features_path:
         features_path = os.environ.get("CVD_FEATURES_PATH", "")
 
-    return model_path or "", features_path or ""
+    return _resolve_path(model_path or ""), _resolve_path(features_path or "")
+
+
+def _get_shap_background_path() -> str:
+    try:
+        from django.conf import settings
+        bg_path = getattr(settings, "CVD_SHAP_BACKGROUND_PATH", None)
+    except Exception:
+        bg_path = None
+
+    if not bg_path:
+        bg_path = os.environ.get("CVD_SHAP_BACKGROUND_PATH", "")
+
+    # Default to cleaned dataset in repo if present
+    if not bg_path:
+        bg_path = "cvd/cleaned_cardio_data.csv"
+
+    return _resolve_path(bg_path)
 
 
 @lru_cache(maxsize=1)
@@ -98,7 +130,54 @@ def _load_feature_columns() -> List[str]:
     return CVD_FEATURE_COLUMNS
 
 
+@lru_cache(maxsize=1)
+def _load_shap_background() -> Optional[pd.DataFrame]:
+    path = _get_shap_background_path()
+    if not path or not os.path.exists(path):
+        return None
+
+    try:
+        df = pd.read_csv(path)
+    except Exception as exc:
+        logger.warning("SHAP background load failed: %s", exc)
+        return None
+
+    if "cardio" in df.columns:
+        df = df.drop(columns=["cardio"])
+
+    feature_columns = _load_feature_columns()
+    missing = [c for c in feature_columns if c not in df.columns]
+    if missing:
+        logger.warning("SHAP background missing columns: %s", ", ".join(missing))
+        return None
+
+    df = df[feature_columns].dropna()
+    if df.empty:
+        return None
+
+    sample_size = min(100, len(df))
+    return df.sample(n=sample_size, random_state=42)
+
+
 # ── SHAP computation ───────────────────────────────────────────────────────────
+
+def _extract_shap_values(sv: Any, feature_columns: List[str]) -> Optional[Dict[str, float]]:
+    values = sv.values if hasattr(sv, "values") else sv
+    if isinstance(values, list):
+        values = values[1] if len(values) > 1 else values[0]
+    if hasattr(values, "ndim"):
+        if values.ndim == 3:
+            values = values[0, :, 1]
+        elif values.ndim == 2:
+            values = values[0]
+        elif values.ndim == 1:
+            values = values
+        else:
+            return None
+    if len(values) != len(feature_columns):
+        return None
+    return {col: float(v) for col, v in zip(feature_columns, values)}
+
 
 def _compute_shap(model, X: pd.DataFrame, feature_columns: List[str]) -> tuple[Optional[Dict], str]:
     """
@@ -113,32 +192,49 @@ def _compute_shap(model, X: pd.DataFrame, feature_columns: List[str]) -> tuple[O
     try:
         import shap  # optional dependency
 
+        background = _load_shap_background()
+        explainer_background = background if background is not None else X
+
+        # Preferred: unified Explainer (handles many model types and pipelines)
+        try:
+            explainer = shap.Explainer(model, explainer_background)
+            sv = explainer(X)
+            shap_dict = _extract_shap_values(sv, feature_columns)
+            if shap_dict:
+                return shap_dict, ""
+        except Exception as exc:
+            logger.debug("SHAP Explainer failed: %s", exc)
+
+        # Tree-based models
         try:
             explainer = shap.TreeExplainer(model)
             sv = explainer.shap_values(X)
-            # sv may be a list (one array per class) or a single 2-D array
-            if isinstance(sv, list):
-                # Take class-1 SHAP values for binary classification
-                values = sv[1][0] if len(sv) > 1 else sv[0][0]
-            else:
-                values = sv[0]
-            shap_dict = {col: float(v) for col, v in zip(feature_columns, values)}
-            return shap_dict, ""
-        except Exception:
-            pass
+            shap_dict = _extract_shap_values(sv, feature_columns)
+            if shap_dict:
+                return shap_dict, ""
+        except Exception as exc:
+            logger.debug("SHAP TreeExplainer failed: %s", exc)
 
-        # Fall back to LinearExplainer / KernelExplainer for non-tree models
+        # Linear models
         try:
             explainer = shap.LinearExplainer(model, X)
             sv = explainer.shap_values(X)
-            if isinstance(sv, list):
-                values = sv[1][0] if len(sv) > 1 else sv[0][0]
-            else:
-                values = sv[0]
-            shap_dict = {col: float(v) for col, v in zip(feature_columns, values)}
-            return shap_dict, ""
-        except Exception:
-            pass
+            shap_dict = _extract_shap_values(sv, feature_columns)
+            if shap_dict:
+                return shap_dict, ""
+        except Exception as exc:
+            logger.debug("SHAP LinearExplainer failed: %s", exc)
+
+        # General fallback (slow but broad)
+        try:
+            predict_fn = model.predict_proba if hasattr(model, "predict_proba") else model.predict
+            explainer = shap.KernelExplainer(predict_fn, explainer_background)
+            sv = explainer.shap_values(X)
+            shap_dict = _extract_shap_values(sv, feature_columns)
+            if shap_dict:
+                return shap_dict, ""
+        except Exception as exc:
+            logger.debug("SHAP KernelExplainer failed: %s", exc)
 
         return None, "SHAP could not be computed for this model type."
 

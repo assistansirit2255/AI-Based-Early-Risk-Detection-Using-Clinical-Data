@@ -2,11 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { getPatient, deletePatient } from '../api/patients'
 import { listRecords, deleteRecord } from '../api/records'
+import { listDiabetesRecords, deleteDiabetesRecord, triggerDiabetesPrediction, listDiabetesPredictions } from '../api/diabetes'
 import { triggerPrediction, listPredictions } from '../api/predictions'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ErrorMessage from '../components/ErrorMessage'
 import RecordTable from '../components/RecordTable'
 import PredictionResult from '../components/PredictionResult'
+import DiabetesRecordTable from '../components/DiabetesRecordTable'
+import DiabetesPredictionResult from '../components/DiabetesPredictionResult'
 
 export default function PatientDetailPage() {
   const { id } = useParams()
@@ -15,23 +18,31 @@ export default function PatientDetailPage() {
   const [patient, setPatient] = useState(null)
   const [records, setRecords] = useState([])
   const [predictions, setPredictions] = useState([])
+  const [diabetesRecords, setDiabetesRecords] = useState([])
+  const [diabetesPredictions, setDiabetesPredictions] = useState([])
   const [loadingData, setLoadingData] = useState(true)
   const [error, setError] = useState(null)
   const [predicting, setPredicting] = useState(false)
   const [predError, setPredError] = useState(null)
+  const [diabetesPredicting, setDiabetesPredicting] = useState(false)
+  const [diabetesPredError, setDiabetesPredError] = useState(null)
 
   const load = useCallback(async () => {
     setLoadingData(true)
     setError(null)
     try {
-      const [p, r, preds] = await Promise.all([
+      const [p, r, preds, dRecords, dPreds] = await Promise.all([
         getPatient(id),
         listRecords(id),
         listPredictions(id),
+        listDiabetesRecords(id),
+        listDiabetesPredictions(id),
       ])
       setPatient(p)
       setRecords(r)
       setPredictions(preds)
+      setDiabetesRecords(dRecords)
+      setDiabetesPredictions(dPreds)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -62,16 +73,40 @@ export default function PatientDetailPage() {
     }
   }
 
+  const handleDeleteDiabetesRecord = async (rid) => {
+    if (!window.confirm('Delete this diabetes record?')) return
+    try {
+      await deleteDiabetesRecord(id, rid)
+      const updated = await listDiabetesRecords(id)
+      setDiabetesRecords(updated)
+    } catch (err) {
+      alert('Failed to delete diabetes record: ' + err.message)
+    }
+  }
+
   const handlePredict = async () => {
     setPredicting(true)
     setPredError(null)
     try {
       const result = await triggerPrediction(id)
-      setPredictions([result, ...predictions])
+      setPredictions((prev) => [result, ...prev])
     } catch (err) {
       setPredError(err.message)
     } finally {
       setPredicting(false)
+    }
+  }
+
+  const handleDiabetesPredict = async () => {
+    setDiabetesPredicting(true)
+    setDiabetesPredError(null)
+    try {
+      const result = await triggerDiabetesPrediction(id)
+      setDiabetesPredictions((prev) => [result, ...prev])
+    } catch (err) {
+      setDiabetesPredError(err.message)
+    } finally {
+      setDiabetesPredicting(false)
     }
   }
 
@@ -94,6 +129,7 @@ export default function PatientDetailPage() {
         </div>
         <div className="flex gap-sm">
           <Link to={`/patients/${id}/records/new`} className="btn btn-primary">+ Add Record</Link>
+          <Link to={`/patients/${id}/diabetes-records/new`} className="btn btn-outline">+ Add Diabetes Record</Link>
           <button className="btn btn-danger" onClick={handleDeletePatient}>Delete Patient</button>
         </div>
       </div>
@@ -178,6 +214,72 @@ export default function PatientDetailPage() {
         {predictions.length === 0 && !predicting && !predError && records.length > 0 && (
           <p style={{ color: '#718096', fontStyle: 'italic' }}>
             No predictions yet. Click "Run Prediction" to analyse this patient.
+          </p>
+        )}
+      </div>
+
+      {/* Diabetes Records */}
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <h3 style={{ margin: 0 }}>Diabetes Records ({diabetesRecords.length})</h3>
+          <Link to={`/patients/${id}/diabetes-records/new`} className="btn btn-outline" style={{ padding: '0.3rem 0.7rem', fontSize: '0.82rem' }}>
+            + Add
+          </Link>
+        </div>
+        <DiabetesRecordTable records={diabetesRecords} onDelete={handleDeleteDiabetesRecord} />
+      </div>
+
+      {/* Diabetes Prediction Section */}
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <h3 style={{ margin: 0 }}>Diabetes Risk Prediction</h3>
+          <button
+            className="btn btn-primary"
+            onClick={handleDiabetesPredict}
+            disabled={diabetesPredicting || diabetesRecords.length === 0}
+          >
+            {diabetesPredicting ? 'Running…' : '🧪 Run Prediction'}
+          </button>
+        </div>
+
+        {diabetesRecords.length === 0 && (
+          <p style={{ color: '#718096', fontStyle: 'italic' }}>
+            Add at least one diabetes record to run a prediction.
+          </p>
+        )}
+
+        {diabetesPredError && <ErrorMessage message={diabetesPredError} />}
+
+        {diabetesPredicting && <LoadingSpinner message="Running diabetes risk prediction…" />}
+
+        {diabetesPredictions.length > 0 && (
+          <div>
+            <h4 style={{ marginBottom: '0.5rem' }}>Latest Prediction</h4>
+            <DiabetesPredictionResult prediction={diabetesPredictions[0]} />
+
+            {diabetesPredictions.length > 1 && (
+              <div style={{ marginTop: '1rem' }}>
+                <h4>Previous Predictions</h4>
+                {diabetesPredictions.slice(1).map((pred) => (
+                  <div key={pred.id} style={{
+                    padding: '0.6rem 0.9rem', borderRadius: 6, marginBottom: '0.4rem',
+                    background: pred.prediction === 1 ? '#fff5f5' : '#f0fff4',
+                    border: `1.5px solid ${pred.prediction === 1 ? '#fc8181' : '#68d391'}`,
+                    display: 'flex', gap: '1rem', fontSize: '0.88rem',
+                  }}>
+                    <span>{pred.prediction === 1 ? '🔴 High Risk' : '🟢 Low Risk'}</span>
+                    <span>{(pred.probability * 100).toFixed(1)}%</span>
+                    <span style={{ color: '#718096' }}>{new Date(pred.created_at).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {diabetesPredictions.length === 0 && !diabetesPredicting && !diabetesPredError && diabetesRecords.length > 0 && (
+          <p style={{ color: '#718096', fontStyle: 'italic' }}>
+            No diabetes predictions yet. Click "Run Prediction" to analyse this patient.
           </p>
         )}
       </div>

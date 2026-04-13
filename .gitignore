@@ -24,3 +24,19 @@ env/
 *.swp
 *.swo
 
+# Large/binary artifacts
+*.csv
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.zip
+*.tar
+*.gz
+*.7z
+

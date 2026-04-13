@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { listPredictions, triggerPrediction } from '../api/predictions'
-import PredictionResult from '../components/PredictionResult'
+import { listDiabetesPredictions, triggerDiabetesPrediction } from '../api/diabetes'
+import DiabetesPredictionResult from '../components/DiabetesPredictionResult'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ErrorMessage from '../components/ErrorMessage'
 
-export default function PredictionPage() {
+export default function DiabetesPredictionPage() {
   const { id } = useParams()
   const [predictions, setPredictions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -17,7 +17,7 @@ export default function PredictionPage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await listPredictions(id)
+      const data = await listDiabetesPredictions(id)
       setPredictions(data)
     } catch (err) {
       setError(err.message)
@@ -32,7 +32,7 @@ export default function PredictionPage() {
     setPredicting(true)
     setPredError(null)
     try {
-      const result = await triggerPrediction(id)
+      const result = await triggerDiabetesPrediction(id)
       setPredictions((prev) => [result, ...prev])
     } catch (err) {
       setPredError(err.message)
@@ -49,15 +49,15 @@ export default function PredictionPage() {
         ← Back to Patient
       </Link>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0.5rem 0 1rem' }}>
-        <h2 style={{ margin: 0 }}>CVD Risk Predictions</h2>
+        <h2 style={{ margin: 0 }}>Diabetes Risk Predictions</h2>
         <button className="btn btn-primary" onClick={handlePredict} disabled={predicting}>
-          {predicting ? 'Running…' : '🔮 Run New Prediction'}
+          {predicting ? 'Running…' : '🧪 Run New Prediction'}
         </button>
       </div>
 
       {error && <ErrorMessage message={error} onRetry={load} />}
       {predError && <ErrorMessage message={predError} />}
-      {predicting && <LoadingSpinner message="Running CVD risk prediction…" />}
+      {predicting && <LoadingSpinner message="Running diabetes risk prediction…" />}
 
       {predictions.length === 0 && !loading && !predicting && (
         <div className="card" style={{ textAlign: 'center', color: '#718096' }}>
@@ -69,7 +69,7 @@ export default function PredictionPage() {
         <div key={pred.id}>
           {i === 0 && <h3>Latest Prediction</h3>}
           {i === 1 && <h3 style={{ marginTop: '1.5rem' }}>Previous Predictions</h3>}
-          <PredictionResult prediction={pred} />
+          <DiabetesPredictionResult prediction={pred} />
         </div>
       ))}
     </div>

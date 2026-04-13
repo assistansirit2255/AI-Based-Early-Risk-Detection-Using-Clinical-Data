@@ -211,6 +211,10 @@ All responses use the envelope:
 
 See [`docs/workflow.md`](docs/workflow.md) for the complete step-by-step workflow.
 
+## ✅ Project Startup Guide
+
+See [`docs/startup.md`](docs/startup.md) for a clean from-scratch setup guide.
+
 ---
 
 ## 🧪 Running Backend Tests
@@ -234,6 +238,10 @@ python manage.py test api
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 | `CVD_MODEL_PATH` | `../cvd/cvd_model.pkl` | Path to model file |
 | `CVD_FEATURES_PATH` | `../cvd/feature_columns.pkl` | Path to feature columns file |
+| `CVD_SHAP_BACKGROUND_PATH` | `cvd/cleaned_cardio_data.csv` | Background data for SHAP |
+| `DIABETES_MODEL_PATH` | `diabetes/diabetes_model.pkl` | Diabetes model file |
+| `DIABETES_FEATURES_PATH` | `diabetes/feature_columns.pkl` | Diabetes feature columns file |
+| `DIABETES_SHAP_BACKGROUND_PATH` | `diabetes/diabetes.csv` | Background data for diabetes SHAP |
 
 ### Frontend (`frontend/.env`)
 

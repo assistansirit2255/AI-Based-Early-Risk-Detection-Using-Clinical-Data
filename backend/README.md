@@ -30,6 +30,8 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+Note: The backend loads backend/.env automatically if python-dotenv is installed.
+
 ## Tests
 
 ```bash
@@ -53,3 +55,11 @@ python manage.py test api
 - **SHAP optional**: tries TreeExplainer → LinearExplainer → returns `null` + warning.
 - **Authoritative feature list**: `["id","age","gender","height","weight","ap_hi","ap_lo","cholesterol","gluc","smoke","alco","active"]`
 - **Standard response envelope**: `{"status": "success"|"error", "data": {...}}`.
+
+## Diabetes Model Env Vars
+
+Add these to backend/.env to enable diabetes predictions:
+
+DIABETES_MODEL_PATH=diabetes/diabetes_model.pkl
+DIABETES_FEATURES_PATH=diabetes/feature_columns.pkl
+DIABETES_SHAP_BACKGROUND_PATH=diabetes/diabetes.csv

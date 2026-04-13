@@ -24,9 +24,17 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .models import HealthRecord, Patient, Prediction
-from .serializers import HealthRecordSerializer, PatientSerializer, PredictionSerializer
+from .models import HealthRecord, Patient, Prediction, DiabetesRecord, DiabetesPrediction
+from .serializers import (
+    HealthRecordSerializer,
+    PatientSerializer,
+    PredictionSerializer,
+    DiabetesRecordSerializer,
+    DiabetesPredictionSerializer,
+)
 from ml_api.cvd_predictor import predict_from_records, ModelNotAvailableError
+from ml_api.diabetes_predictor import predict_from_record as predict_diabetes_record
+from ml_api.diabetes_predictor import ModelNotAvailableError as DiabetesModelNotAvailableError
 
 logger = logging.getLogger(__name__)
 
@@ -208,4 +216,91 @@ def prediction_list(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     predictions = patient.predictions.all()
     serializer = PredictionSerializer(predictions, many=True)
+    return _ok(serializer.data)
+
+
+# ── Diabetes Records ─────────────────────────────────────────────────────────
+
+@api_view(["GET", "POST"])
+def diabetes_record_list(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+
+    if request.method == "GET":
+        records = patient.diabetes_records.all()
+        serializer = DiabetesRecordSerializer(records, many=True)
+        return _ok(serializer.data)
+
+    serializer = DiabetesRecordSerializer(data=request.data)
+    if serializer.is_valid():
+        record = serializer.save(patient=patient)
+        return _ok(DiabetesRecordSerializer(record).data, status.HTTP_201_CREATED)
+    return _err("Validation failed", details=serializer.errors)
+
+
+@api_view(["DELETE"])
+def diabetes_record_detail(request, pk, rid):
+    patient = get_object_or_404(Patient, pk=pk)
+    record = get_object_or_404(DiabetesRecord, pk=rid, patient=patient)
+    record.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Diabetes Prediction ──────────────────────────────────────────────────────
+
+@api_view(["POST"])
+def diabetes_predict(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    record = patient.diabetes_records.order_by("-date").first()
+
+    if not record:
+        return _err(
+            "No diabetes records found for this patient. "
+            "Add at least one diabetes record before requesting a prediction.",
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+    payload = {
+        "pregnancies": record.pregnancies,
+        "glucose": record.glucose,
+        "blood_pressure": record.blood_pressure,
+        "skin_thickness": record.skin_thickness,
+        "insulin": record.insulin,
+        "bmi": record.bmi,
+        "diabetes_pedigree_function": record.diabetes_pedigree_function,
+        "age": record.age,
+    }
+
+    try:
+        result = predict_diabetes_record(payload)
+    except DiabetesModelNotAvailableError as exc:
+        logger.error("Diabetes model not available for patient %s: %s", pk, exc)
+        return _err(
+            "The diabetes prediction model is currently unavailable. "
+            "Please ensure the model file is configured correctly.",
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    except Exception:
+        logger.exception("Unexpected diabetes prediction error for patient %s", pk)
+        return _err(
+            "An unexpected error occurred during diabetes prediction.",
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    prediction_obj = DiabetesPrediction.objects.create(
+        patient=patient,
+        record=record,
+        prediction=result["prediction"],
+        probability=result["probability"],
+        shap_values=result.get("shap_values"),
+        shap_warning=result.get("shap_warning", ""),
+    )
+
+    return _ok(DiabetesPredictionSerializer(prediction_obj).data, status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+def diabetes_prediction_list(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    predictions = patient.diabetes_predictions.all()
+    serializer = DiabetesPredictionSerializer(predictions, many=True)
     return _ok(serializer.data)

@@ -105,3 +105,51 @@ class Prediction(models.Model):
     def __str__(self):
         label = "High Risk" if self.prediction == 1 else "Low Risk"
         return f"Prediction [{label}] for Patient #{self.patient_id}"
+
+
+class DiabetesRecord(models.Model):
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="diabetes_records"
+    )
+    date = models.DateField(help_text="Date of measurement")
+    pregnancies = models.IntegerField(default=0, help_text="Number of pregnancies")
+    glucose = models.FloatField(help_text="Glucose level (mg/dL)")
+    blood_pressure = models.FloatField(help_text="Blood pressure (mmHg)")
+    skin_thickness = models.FloatField(help_text="Skin thickness (mm)")
+    insulin = models.FloatField(help_text="Insulin level")
+    bmi = models.FloatField(help_text="Body Mass Index")
+    diabetes_pedigree_function = models.FloatField(help_text="Diabetes pedigree function")
+    age = models.IntegerField(help_text="Age in years")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"Diabetes Record [{self.date}] for Patient #{self.patient_id}"
+
+
+class DiabetesPrediction(models.Model):
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="diabetes_predictions"
+    )
+    record = models.ForeignKey(
+        DiabetesRecord, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="predictions"
+    )
+    prediction = models.IntegerField(help_text="0=Low Risk, 1=High Risk")
+    probability = models.FloatField(help_text="Probability of high risk (0-1)")
+    shap_values = models.JSONField(
+        null=True, blank=True, help_text="SHAP feature attributions dict or null"
+    )
+    shap_warning = models.TextField(
+        blank=True, default="", help_text="Warning message if SHAP could not be computed"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        label = "High Risk" if self.prediction == 1 else "Low Risk"
+        return f"Diabetes Prediction [{label}] for Patient #{self.patient_id}"

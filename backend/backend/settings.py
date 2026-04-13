@@ -16,6 +16,14 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+try:
+    from dotenv import load_dotenv
+except Exception:
+    load_dotenv = None
+
+if load_dotenv:
+    load_dotenv(BASE_DIR / ".env")
+
 SECRET_KEY = os.environ.get(
     "SECRET_KEY",
     "django-insecure-change-me-in-production-use-a-long-random-string"
@@ -117,6 +125,23 @@ CVD_MODEL_PATH = os.environ.get(
 CVD_FEATURES_PATH = os.environ.get(
     "CVD_FEATURES_PATH",
     str(BASE_DIR.parent / "cvd" / "feature_columns.pkl"),
+)
+CVD_SHAP_BACKGROUND_PATH = os.environ.get(
+    "CVD_SHAP_BACKGROUND_PATH",
+    str(BASE_DIR.parent / "cvd" / "cleaned_cardio_data.csv"),
+)
+
+DIABETES_MODEL_PATH = os.environ.get(
+    "DIABETES_MODEL_PATH",
+    str(BASE_DIR.parent / "diabetes" / "diabetes_model.pkl"),
+)
+DIABETES_FEATURES_PATH = os.environ.get(
+    "DIABETES_FEATURES_PATH",
+    str(BASE_DIR.parent / "diabetes" / "feature_columns.pkl"),
+)
+DIABETES_SHAP_BACKGROUND_PATH = os.environ.get(
+    "DIABETES_SHAP_BACKGROUND_PATH",
+    str(BASE_DIR.parent / "diabetes" / "diabetes.csv"),
 )
 
 # ── Logging ───────────────────────────────────────────────────────────────────
